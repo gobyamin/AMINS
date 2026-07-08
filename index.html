@@ -944,7 +944,6 @@
           <button class="menu-tile main course-start" data-course="random" type="button">
             <strong>전체 랜덤</strong>
             <span>10문제 · 실전</span>
-            <span class="best-badge hidden" data-best="random"></span>
           </button>
           <button id="openGroupsBtn" class="menu-tile" type="button">
             <strong>묶음 연습</strong>
@@ -980,13 +979,6 @@
           <span class="we-arrow">›</span>
         </button>
 
-        <button id="installBtn" class="words-entry install-entry hidden" type="button">
-          <span class="we-left">
-            <strong>📲 앱으로 설치하기</strong>
-            <span>홈 화면에 추가하면 진짜 앱처럼!</span>
-          </span>
-          <span class="we-arrow">›</span>
-        </button>
       </div>
 
       <div id="pickerView" class="picker-view hidden">
@@ -3810,6 +3802,9 @@
 
     const TITLES=["🌱 왕초보 새싹","🐣 병아리 스피커","🥉 브론즈 스피커","🥈 실버 스피커","🥇 골드 스피커","💎 다이아 스피커","🚀 로켓 회화러","🌟 원어민 어깨동무","👑 회화 마스터","🏆 살아있는 레전드"];
     function titleFor(lv){ return TITLES[Math.min(lv,TITLES.length)-1]; }
+    function levelThreshold(lv){ return 25*(lv-1)*(lv+2); }
+    function levelFor(xp){ let lv=1; while(xp>=levelThreshold(lv+1)) lv++; return lv; }
+    const DAILY_XP_CAP=100;
     const DAILY_GOAL=30;
     function todayXpGet(){
       const raw=store.get("amins-xpday")||"";
@@ -3881,7 +3876,7 @@
       mascotEditBtn:$("mascotEditBtn"),
       hudTitle:$("hudTitle"), hudGoal:$("hudGoal"), goalArc:$("goalArc"), totalXpLine:$("totalXpLine"),
       reviewCardBtn:$("reviewCardBtn"), reviewDueCount:$("reviewDueCount"),
-      installBtn:$("installBtn"), badgeRow:$("badgeRow"),
+      badgeRow:$("badgeRow"),
       speakWrap:$("speakWrap"), micBtn:$("micBtn"), spokenText:$("spokenText"), speakSwapBtn:$("speakSwapBtn"),
       modeSpeakingBtn:$("modeSpeakingBtn"),
       levelUpOverlay:$("levelUpOverlay"), luConfetti:$("luConfetti"), luLevel:$("luLevel"), luName:$("luName"),
@@ -4165,7 +4160,7 @@
       const last=store.get("amins-lastday")||"";
       const y=new Date(); y.setDate(y.getDate()-1);
       const alive=(last===todayStr()||last===dateStr(y))?streak:0;
-      const lv=Math.floor(xp/100)+1;
+      const lv=levelFor(xp);
       DOM.hudStreak.textContent=String(alive);
       DOM.hudLevel.textContent="Lv."+lv;
       DOM.hudTitle.textContent=titleFor(lv);
@@ -4189,13 +4184,16 @@
     }
     function grantXp(n){
       const before=parseInt(store.get("amins-xp")||"0",10)||0;
-      const total=before+n;
-      store.set("amins-xp",String(total));
+      const usedToday=todayXpGet();
       addTodayXp(n);
+      const room=Math.max(0,DAILY_XP_CAP-usedToday);
+      const applied=Math.min(n,room);
+      const total=before+applied;
+      store.set("amins-xp",String(total));
       if(total>=500) awardBadge("b_xp500");
-      const lvB=Math.floor(before/100)+1, lvA=Math.floor(total/100)+1;
+      const lvB=levelFor(before), lvA=levelFor(total);
       if(lvA>lvB) showLevelUp(lvA);
-      return {total:total,lv:lvA};
+      return {total:total,lv:lvA,applied:applied,capped:applied<n};
     }
     let earnedBadges=(function(){ try{ return new Set(JSON.parse(store.get("amins-badges")||"[]")); }catch(e){ return new Set(); } })();
     function awardBadge(id){
@@ -4727,10 +4725,11 @@
       if(state.bestCombo>=10) awardBadge("b_combo10");
       if(streak>=3) awardBadge("b_streak3");
       if(streak>=7) awardBadge("b_streak7");
-      DOM.xpLine.textContent="⚡ +"+state.sessionXp+" XP"
-        +(state.sessionBonus?(" (콤보 보너스 +"+state.sessionBonus+")"):"")
-        +" · 완주 보너스 +"+bonus
-        +" · 총 "+res.total+" XP · Lv."+res.lv+" "+titleFor(res.lv)+" · 🔥 "+streak+"일 연속";
+      let xpMsg="⚡ +"+res.applied+" XP 적립";
+      if(res.capped) xpMsg+=" · 오늘 레벨 XP 상한("+DAILY_XP_CAP+") 도달 🔒 내일 또 쌓아요!";
+      else xpMsg+=(state.sessionBonus?(" (콤보 보너스 +"+state.sessionBonus+")"):"")+" · 완주 보너스 +"+bonus;
+      xpMsg+=" · 총 "+res.total+" XP · Lv."+res.lv+" "+titleFor(res.lv)+" · 🔥 "+streak+"일 연속";
+      DOM.xpLine.textContent=xpMsg;
       DOM.xpLine.classList.remove("hidden");
       refreshProfile();
       showScreen("result");
@@ -5263,7 +5262,8 @@
       const w=wordState.list[wordState.idx];
       if(!w) return;
       stopSpeech();
-      speakSequence([{text:w.en,rate:0.92},{text:w.ex,rate:0.95}]);
+      if(wordState.flipped) speakSequence([{text:w.ex,rate:0.95}]);
+      else speakSequence([{text:w.en,rate:0.92}]);
     });
 
     /* ---------- word random test ---------- */
@@ -5337,7 +5337,7 @@
       const total=testState.qs.length;
       const perfect=testState.score===total;
       const xp=testState.score*3+(perfect?5:0);
-      grantXp(xp);
+      const res=grantXp(xp);
       const streak=updateStreak();
       if(perfect) awardBadge("b_test_perfect");
       if(streak>=3) awardBadge("b_streak3");
@@ -5350,7 +5350,7 @@
       DOM.testResult.innerHTML=
         '<div class="tr-emoji">'+emoji+"</div>"+
         '<div class="tr-score">'+testState.score+"/"+total+" 정답!</div>"+
-        '<div class="tr-xp">⚡ +'+xp+" XP"+(perfect?" (올클리어 보너스 +5)":"")+" · 🔥 "+streak+"일 연속</div>"+
+        '<div class="tr-xp">⚡ +'+res.applied+" XP"+(res.capped?" (오늘 상한 도달 🔒)":(perfect?" (올클리어 보너스 +5)":""))+" · 🔥 "+streak+"일 연속</div>"+
         '<div class="tr-actions">'+
           '<button id="trAgainBtn" class="tr-btn again" type="button">한 번 더 🎯</button>'+
           '<button id="trBackBtn" class="tr-btn back" type="button">카드로 돌아가기</button>'+
@@ -5554,32 +5554,7 @@
         document.head.appendChild(at);
       }catch(e){}
     })();
-    let deferredInstall=null;
-    window.addEventListener("beforeinstallprompt",e=>{
-      e.preventDefault();
-      deferredInstall=e;
-      DOM.installBtn.classList.remove("hidden");
-    });
-    (function(){
-      const standalone=(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)||window.navigator.standalone;
-      const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent||"");
-      if(!standalone && isIOS) DOM.installBtn.classList.remove("hidden");
-    })();
-    DOM.installBtn.addEventListener("click",()=>{
-      if(deferredInstall){
-        deferredInstall.prompt();
-        deferredInstall=null;
-        DOM.installBtn.classList.add("hidden");
-        return;
-      }
-      openConfirm({
-        title:"📲 홈 화면에 추가",
-        msg:"브라우저의 공유 버튼(⬆️ 또는 ⋮)을 누른 뒤 '홈 화면에 추가'를 선택하면 앱처럼 설치돼요!",
-        leaveLabel:"알겠어요",
-        hideStay:true,
-        onLeave:null
-      });
-    });
+
     function doQuitToHome(){
       stopSpeech(); hideFeedback();
       showScreen("start"); closePicker(); closeWords(); refreshBestBadges(); refreshProfile();
