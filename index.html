@@ -538,6 +538,11 @@
       border-radius: 26px 26px 0 0;
       padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
       box-shadow: 0 -18px 50px rgba(15, 23, 42, 0.25);
+      max-height: 92vh;
+      max-height: calc(100dvh - 20px);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
     }
     .mode-course { font-size: 13px; font-weight: 1000; color: var(--blue-dark); }
     .mode-title { margin: 4px 0 2px; font-size: 21px; letter-spacing: -0.04em; }
@@ -1077,7 +1082,7 @@
         <input id="nameInput" class="name-input" maxlength="12" placeholder="예: Amy, Kevin, Mina" autocomplete="off" autocapitalize="words" />
         <div class="face-label">내 캐릭터 얼굴</div>
         <div id="faceGrid" class="face-grid"></div>
-        <div class="face-label">내 뱃지 컬렉션</div>
+        <div class="face-label" id="badgeLabel">내 뱃지 컬렉션</div>
         <div id="badgeRow" class="badge-row"></div>
         <button id="nameSaveBtn" class="name-save" type="button">저장하기</button>
       </div>
@@ -3876,7 +3881,7 @@
       mascotEditBtn:$("mascotEditBtn"),
       hudTitle:$("hudTitle"), hudGoal:$("hudGoal"), goalArc:$("goalArc"), totalXpLine:$("totalXpLine"),
       reviewCardBtn:$("reviewCardBtn"), reviewDueCount:$("reviewDueCount"),
-      badgeRow:$("badgeRow"),
+      badgeRow:$("badgeRow"), badgeLabel:$("badgeLabel"),
       speakWrap:$("speakWrap"), micBtn:$("micBtn"), spokenText:$("spokenText"), speakSwapBtn:$("speakSwapBtn"),
       modeSpeakingBtn:$("modeSpeakingBtn"),
       levelUpOverlay:$("levelUpOverlay"), luConfetti:$("luConfetti"), luLevel:$("luLevel"), luName:$("luName"),
@@ -4273,6 +4278,9 @@
       DOM.nameInput.value=store.get("amins-name")||"";
       pendingFace=userFace();
       renderFaceGrid();
+      const firstRun=!(store.get("amins-name"));
+      DOM.badgeLabel.classList.toggle("hidden",firstRun);
+      DOM.badgeRow.classList.toggle("hidden",firstRun);
       DOM.nameOverlay.classList.remove("hidden");
       window.setTimeout(()=>{ try{ DOM.nameInput.focus(); }catch(e){} },80);
     }
